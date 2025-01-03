@@ -48,7 +48,31 @@ const client = new MongoClient(uri, {
 });
 async function run() {
   try {
-    // Generate jwt token
+    const db = client.db("PlantNet");
+    const usersCollection = db.collection("users");
+    const plantsCollection = db.collection("plants");
+    const ordersCollection = db.collection("orders");
+
+    // Save or update user info in Database
+    app.post("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = req.body;
+
+      // Check user is All-ready exist or not
+      const isExist = await usersCollection.findOne(query);
+      if (isExist) {
+        return res.send(isExist);
+      }
+      const result = await usersCollection.insertOne({
+        ...user,
+        role: "customer",
+        timeStamp: Date.now(),
+      });
+      res.send(result);
+    });
+
+    // ----------------------------------------Generate jwt token---------------------------------------------
     app.post("/jwt", async (req, res) => {
       const email = req.body;
       const token = jwt.sign(email, process.env.ACCESS_TOKEN_SECRET, {
@@ -76,8 +100,38 @@ async function run() {
         res.status(500).send(err);
       }
     });
+    //----------------------------------------------JWT--------------------------------------------------------
 
-    // Send a ping to confirm a successful connection
+    // ------------------------------------------Plants Collection------------------------------------------------
+
+    // Plants Add (Post method)
+    app.post("/plants", verifyToken, async (req, res) => {
+      const plant = req.body;
+      const result = await plantsCollection.insertOne(plant);
+      res.send(result);
+    });
+
+    // Plants get (GET Method)
+    app.get("/plants", async (req, res) => {
+      const result = await plantsCollection.find().toArray();
+      res.send(result);
+    });
+
+    // plants get by id
+    app.get("/plants/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await plantsCollection.findOne(query);
+      res.send(result);
+    });
+
+    // save order in db
+    app.post("/order", verifyToken, async (req, res) => {
+      const orderInfo = req.body;
+      const result = await ordersCollection.insertOne(orderInfo);
+      res.send(result);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
