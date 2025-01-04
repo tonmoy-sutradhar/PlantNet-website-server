@@ -132,6 +132,67 @@ async function run() {
       res.send(result);
     });
 
+    // Manage plant/order quantity
+    app.patch("/plants/quantity/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const { quantityToUpdate } = req.body;
+      const filter = { _id: new ObjectId(id) };
+      let updateDoc = {
+        // inc use kora hoi value increase korar jonno
+        $inc: { quantity: -quantityToUpdate },
+      };
+      const result = await plantsCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    // get all order for a specific customer by email
+    app.get("/customer-orders/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { "customer.email": email };
+
+      // Aggreged korte hbe ---> part-3 (32:22 min)
+      const result = await ordersCollection
+        .aggregate([
+          // 1st state match -->
+          {
+            $match: query, //match specific customers data only by email
+          },
+          {
+            $addFields: {
+              plantId: { $toObjectId: "$plantID" }, //convert plantID to objectId field
+            },
+          },
+          {
+            $lookup: {
+              // go to a different collection and look for data
+              from: "plants", // collection name
+              localField: "plantId", // local data that i want to match
+              foreignField: "_id", // foreign field name of that same data
+              as: "plants", // return the data as plants array (array naming)
+            },
+          },
+          {
+            $unwind: "$plants", // unwind lookup result, return without array
+          },
+          {
+            $addFields: {
+              // add those fields in order object
+              name: "$plants.name",
+              image: "$plants.image",
+              category: "$plants.category",
+            },
+          },
+          {
+            $project: {
+              // remove plants object property from order object
+              plants: 0,
+            },
+          },
+        ])
+        .toArray();
+      res.send(result);
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
