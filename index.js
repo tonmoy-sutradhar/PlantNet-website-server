@@ -53,6 +53,37 @@ async function run() {
     const plantsCollection = db.collection("plants");
     const ordersCollection = db.collection("orders");
 
+    // Admin Verification
+    const verifyAdmin = async (req, res, next) => {
+      // console.log("Data from AdminVerify token--->", req.user);
+
+      const email = req.user?.email;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== "admin")
+        return res
+          .status(403)
+          .send({ message: "Forbidden Access, Only Admin can action" });
+
+      next();
+    };
+
+    // Seller Verification
+    const verifySeller = async (req, res, next) => {
+      // console.log("Data from SellerVerify token--->", req.user);
+
+      const email = req.user?.email;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== "seller")
+        return res
+          .status(403)
+          .send({ message: "Forbidden Access, Only Seller can action" });
+
+      next();
+    };
+
+    // time: -11.55 baki ace
     // ----------------------------------------Generate jwt token---------------------------------------------
     app.post("/jwt", async (req, res) => {
       const email = req.body;
@@ -103,7 +134,7 @@ async function run() {
     });
 
     // Manage user status and role
-    app.patch("/users/:email", verifyToken, async (req, res) => {
+    app.patch("/users/:email", verifyToken, verifyAdmin, async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
@@ -120,7 +151,7 @@ async function run() {
       res.send(result);
     });
 
-    // get user role
+    // // get user role
     app.get("/users/role/:email", async (req, res) => {
       const email = req.params.email;
       const result = await usersCollection.findOne({ email });
@@ -128,7 +159,7 @@ async function run() {
     });
 
     // get user Just show Admin
-    app.get("/all-users/:email", verifyToken, async (req, res) => {
+    app.get("/all-users/:email", verifyToken, verifyAdmin, async (req, res) => {
       const email = req.params.email;
       const query = { email: { $ne: email } };
       const result = await usersCollection.find(query).toArray();
@@ -149,8 +180,17 @@ async function run() {
 
     // ------------------------------------------Plants Collection------------------------------------------------
 
+    // // get add plant data (inventory) for seller
+    app.get("/plants/seller", verifyToken, verifySeller, async (req, res) => {
+      const email = req.params.email;
+      const result = await plantsCollection
+        .find({ "seller?.email": email })
+        .toArray();
+      res.send(result);
+    });
+
     // Plants Add (Post method)
-    app.post("/plants", verifyToken, async (req, res) => {
+    app.post("/plants", verifyToken, verifySeller, async (req, res) => {
       const plant = req.body;
       const result = await plantsCollection.insertOne(plant);
       res.send(result);
