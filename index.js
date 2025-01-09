@@ -53,25 +53,6 @@ async function run() {
     const plantsCollection = db.collection("plants");
     const ordersCollection = db.collection("orders");
 
-    // Save or update user info in Database
-    app.post("/users/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { email };
-      const user = req.body;
-
-      // Check user is All-ready exist or not
-      const isExist = await usersCollection.findOne(query);
-      if (isExist) {
-        return res.send(isExist);
-      }
-      const result = await usersCollection.insertOne({
-        ...user,
-        role: "customer",
-        timeStamp: Date.now(),
-      });
-      res.send(result);
-    });
-
     // ----------------------------------------Generate jwt token---------------------------------------------
     app.post("/jwt", async (req, res) => {
       const email = req.body;
@@ -101,6 +82,58 @@ async function run() {
       }
     });
     //----------------------------------------------JWT--------------------------------------------------------
+
+    // Save or update user info in Database
+    app.post("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = req.body;
+
+      // Check user is All-ready exist or not
+      const isExist = await usersCollection.findOne(query);
+      if (isExist) {
+        return res.send(isExist);
+      }
+      const result = await usersCollection.insertOne({
+        ...user,
+        role: "customer",
+        timeStamp: Date.now(),
+      });
+      res.send(result);
+    });
+
+    // Manage user status and role
+    app.patch("/users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user?.status === "Requested") {
+        return res.status(400).send("You have already requested, wait.");
+      }
+
+      const updateDoc = {
+        $set: {
+          status: "Requested",
+        },
+      };
+      const result = await usersCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // get user role
+    app.get("/users/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await usersCollection.findOne({ email });
+      res.send({ role: result?.role });
+    });
+
+    // get user Just show Admin
+    app.get("/all-users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: { $ne: email } };
+      const result = await usersCollection.find(query).toArray();
+      res.send(result);
+    });
 
     // ------------------------------------------Plants Collection------------------------------------------------
 
@@ -135,12 +168,18 @@ async function run() {
     // Manage plant/order quantity
     app.patch("/plants/quantity/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
-      const { quantityToUpdate } = req.body;
+      const { quantityToUpdate, status } = req.body;
       const filter = { _id: new ObjectId(id) };
       let updateDoc = {
         // inc use kora hoi value increase korar jonno
         $inc: { quantity: -quantityToUpdate },
       };
+
+      if (status === "increase") {
+        updateDoc = {
+          $inc: { quantity: quantityToUpdate },
+        };
+      }
       const result = await plantsCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
@@ -190,6 +229,19 @@ async function run() {
           },
         ])
         .toArray();
+      res.send(result);
+    });
+
+    // cancel/delete order
+    app.delete("/orders/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const order = await ordersCollection.findOne(query);
+      if (order.status === "delivered")
+        return res
+          .status(409)
+          .send("Cannot cancle once the product is delivered");
+      const result = await ordersCollection.deleteOne(query);
       res.send(result);
     });
 
