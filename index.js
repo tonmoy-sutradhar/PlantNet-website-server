@@ -135,6 +135,18 @@ async function run() {
       res.send(result);
     });
 
+    // Update a user role (like: customer to seller)
+    app.patch("/user/role/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const { role } = req.body;
+      const filter = { email };
+      const updateDoc = {
+        $set: { role, status: "Verified" },
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     // ------------------------------------------Plants Collection------------------------------------------------
 
     // Plants Add (Post method)
