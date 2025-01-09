@@ -166,6 +166,14 @@ async function run() {
       res.send(result);
     });
 
+    // Delete a plant by seller
+    app.delete("/plants/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await plantsCollection.deleteOne(query);
+      res.send(result);
+    });
+
     // Update a user role (like: customer to seller)
     app.patch("/user/role/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
