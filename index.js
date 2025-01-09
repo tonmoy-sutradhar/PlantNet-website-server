@@ -175,16 +175,21 @@ async function run() {
     });
 
     // Update a user role (like: customer to seller)
-    app.patch("/user/role/:email", verifyToken, async (req, res) => {
-      const email = req.params.email;
-      const { role } = req.body;
-      const filter = { email };
-      const updateDoc = {
-        $set: { role, status: "Verified" },
-      };
-      const result = await usersCollection.updateOne(filter, updateDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/user/role/:email",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.params.email;
+        const { role } = req.body;
+        const filter = { email };
+        const updateDoc = {
+          $set: { role, status: "Verified" },
+        };
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      }
+    );
 
     // ------------------------------------------Plants Collection------------------------------------------------
 
@@ -194,6 +199,18 @@ async function run() {
       const result = await plantsCollection
         .find({ "seller?.email": email })
         .toArray();
+      res.send(result);
+    });
+
+    // Update a order status by seller)
+    app.patch("/orders/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: { status },
+      };
+      const result = await ordersCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
 
@@ -291,6 +308,57 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
+    // get all orders for a specific seller by email
+    app.get(
+      "/seller-orders/:email",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { seller: email };
+
+        // Aggreged korte hbe ---> part-3 (32:22 min)
+        const result = await ordersCollection
+          .aggregate([
+            // 1st state match -->
+            {
+              $match: query, //match specific customers data only by email
+            },
+            {
+              $addFields: {
+                plantId: { $toObjectId: "$plantID" }, //convert plantID to objectId field
+              },
+            },
+            {
+              $lookup: {
+                // go to a different collection and look for data
+                from: "plants", // collection name
+                localField: "plantId", // local data that i want to match
+                foreignField: "_id", // foreign field name of that same data
+                as: "plants", // return the data as plants array (array naming)
+              },
+            },
+            {
+              $unwind: "$plants", // unwind lookup result, return without array
+            },
+            {
+              $addFields: {
+                // add those fields in order object
+                name: "$plants.name",
+              },
+            },
+            {
+              $project: {
+                // remove plants object property from order object
+                plants: 0,
+              },
+            },
+          ])
+          .toArray();
+        res.send(result);
+      }
+    );
 
     // cancel/delete order
     app.delete("/orders/:id", verifyToken, async (req, res) => {
